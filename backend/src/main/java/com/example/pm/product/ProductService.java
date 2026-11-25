@@ -1,5 +1,7 @@
 package com.example.pm.product;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,12 +12,17 @@ import java.util.List;
 @Transactional
 public class ProductService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProductService.class);
+
     private static final BigDecimal MAX_PRICE_INCREASE_FACTOR = new BigDecimal("1.50");
+    static final int LOW_STOCK_THRESHOLD = 5;
 
     private final ProductRepository repository;
+    private final StockAlertNotifier notifier;
 
-    public ProductService(ProductRepository repository) {
+    public ProductService(ProductRepository repository, StockAlertNotifier notifier) {
         this.repository = repository;
+        this.notifier = notifier;
     }
 
     public Product create(CreateProductRequest request) {
@@ -59,7 +66,12 @@ public class ProductService {
         product.setDescription(request.description());
         product.setPrice(request.price());
         product.setStockQuantity(request.stockQuantity());
-        return repository.save(product);
+        Product saved = repository.save(product);
+
+        if (saved.getStockQuantity() < LOW_STOCK_THRESHOLD) {
+            sendLowStockAlert(saved);
+        }
+        return saved;
     }
 
     public void delete(Long id) {
@@ -70,6 +82,15 @@ public class ProductService {
         }
 
         repository.deleteById(id);
+    }
+
+    private void sendLowStockAlert(Product product) {
+        try {
+            notifier.notifyLowStock(product);
+        } catch (RuntimeException e) {
+            // R10: alerts are best-effort; never fail the update because of them
+            log.error("Failed to send low-stock alert for SKU {}", product.getSku(), e);
+        }
     }
 
     private void validate(String name, BigDecimal price, int stockQuantity) {

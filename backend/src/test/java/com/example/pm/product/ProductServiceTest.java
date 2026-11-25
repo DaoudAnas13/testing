@@ -23,7 +23,7 @@ class ProductServiceTest {
     void setUp() {
         // Fresh objects for EVERY test, so tests can never affect each other
         repository = new InMemoryProductRepository();
-        service = new ProductService(repository);
+        service = new ProductService(repository, product -> { });
     }
 
     // ---------- helpers (keep tests short and focused on what matters) ----------
